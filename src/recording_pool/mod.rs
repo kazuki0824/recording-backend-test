@@ -1,4 +1,4 @@
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::{Receiver, Sender};
 
 pub(crate) enum RecordControlMessage {
     Add,
@@ -6,6 +6,26 @@ pub(crate) enum RecordControlMessage {
     Remove
 }
 
-pub(crate) async fn recording_pool_startup(rx: Receiver<RecordControlMessage>) {
+struct RecordingTask {
 
+}
+
+pub(crate) async fn recording_pool_startup(tx: Sender<RecordControlMessage>, mut rx: Receiver<RecordControlMessage>) {
+    let q_recording: Vec<RecordingTask> = vec![];
+
+    loop {
+        match rx.recv().await
+        {
+            Some(RecordControlMessage::Add) => {
+
+            },
+            Some(RecordControlMessage::Remove) => {
+
+            },
+            Some(RecordControlMessage::Update) => {
+
+            },
+            None => break
+        }
+    }
 }

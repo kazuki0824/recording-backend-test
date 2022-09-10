@@ -9,9 +9,14 @@ rust-version = "1.63" #Because of sched_trigger/mod.rs:3
 [dependencies]
 log = "~0.4.0"
 env_logger = "~0.9.0"
+
 mirakurun_client = { path = "../mirakurun_client" }
 meilisearch-sdk = { path = "../../meilisearch-sdk" }
 
 axum = "^0.5.15"
+chrono = {version = "^0.4", features = ["clock"], default-features = false }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "~0.1"
+
+[profile.release]
+lto = true

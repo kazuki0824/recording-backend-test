@@ -1,6 +1,7 @@
 use crate::{
     epg_syncer::epg_sync_startup,
-    sched_trigger::scheduler_startup
+    sched_trigger::scheduler_startup,
+    recording_pool::recording_pool_startup
 };
 
 // mod es;
@@ -21,6 +22,7 @@ async fn main() {
     tokio::select! {
         _ = epg_sync_startup() => {  },
         _ = scheduler_startup(rqn_tx.clone()) => {  },
+        _ = recording_pool_startup(rqn_tx, rqn_rx) => {  }
 
         _ = tokio::signal::ctrl_c() => {  }
     }
