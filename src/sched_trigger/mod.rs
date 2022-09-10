@@ -12,15 +12,16 @@ pub(crate) struct Reservation {
 
 }
 
-
 pub(crate) async fn scheduler_startup(tx: Sender<RecordControlMessage>) -> ! {
 
     loop {
         let lock = Q_RESERVED.lock().unwrap();
 
         for item in lock.iter() {
-            if is_in_the_recording_range(item.start.get(), item.end.get(), Local::now()).await {
-                tx.send(RecordControlMessage::Add);
+            if is_in_the_recording_range(item.start.get(), item.end.get(), Local::now()) {
+                tx.send(RecordControlMessage::Add).await.unwrap();
+            } else if item.end.get() < Local::now() {
+                tx.send(RecordControlMessage::Remove).await.unwrap()
             }
         }
 
@@ -28,6 +29,7 @@ pub(crate) async fn scheduler_startup(tx: Sender<RecordControlMessage>) -> ! {
     }
 }
 
-async fn is_in_the_recording_range(left: DateTime<Local>, right: DateTime<Local>, value: DateTime<Local>) -> bool {
+#[inline]
+fn is_in_the_recording_range(left: DateTime<Local>, right: DateTime<Local>, value: DateTime<Local>) -> bool {
     (left - chrono::Duration::seconds(10) < value) && (value < right)
 }

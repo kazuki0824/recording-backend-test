@@ -1,5 +1,6 @@
 use tokio::sync::mpsc::{Receiver, Sender};
 
+#[derive(Debug)]
 pub(crate) enum RecordControlMessage {
     Add,
     Update,
