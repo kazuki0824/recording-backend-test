@@ -1,28 +1,28 @@
-use crate::epg_syncer::epg_sync_startup;
+use crate::{
+    epg_syncer::epg_sync_startup,
+    sched_trigger::scheduler_startup
+};
 
 // mod es;
 mod api;
 mod epg_syncer;
 mod mirakurun_client;
 mod recording_pool;
-mod time_trigger;
+mod sched_trigger;
 
 #[tokio::main]
 async fn main() {
     println!("Hello, world!");
 
-    // TODO: https://tokio.rs/tokio/topics/shutdown
-    // match signal::ctrl_c().await {
-    //     Ok(()) => {},
-    //     Err(err) => {
-    //         eprintln!("Unable to listen for shutdown signal: {}", err);
-    //         // we also shut down in case of error
-    //     },
-    // }
+    //Create Recording Queue Notifier
+    let (rqn_tx, mut rqn_rx) = tokio::sync::mpsc::channel(100);
 
     // Spawn epg_syncer
-    epg_sync_startup().await;
+    tokio::select! {
+        _ = epg_sync_startup() => {  },
+        _ = scheduler_startup(rqn_tx.clone()) => {  },
 
-
+        _ = tokio::signal::ctrl_c() => {  }
+    }
 
 }

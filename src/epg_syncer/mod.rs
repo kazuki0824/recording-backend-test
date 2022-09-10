@@ -1,4 +1,5 @@
 use std::time::Duration;
+
 use meilisearch_sdk;
 use meilisearch_sdk::client::Client;
 use meilisearch_sdk::errors::Error;
@@ -8,17 +9,19 @@ use mirakurun_client::apis::programs_api::get_program;
 use mirakurun_client::models::Program;
 use tokio_stream::StreamExt;
 
+use crate::sched_trigger::Q_RESERVED;
+
 mod events_stream;
 mod periodic_tasks;
 mod query;
 
-pub async fn epg_sync_startup() {
+pub(crate) async fn epg_sync_startup() {
     let tracker =
         ProgramsIndexManager::new("http://localhost:40772/api", "http://localhost:7700/").await;
 
     let periodic = async {
         loop {
-            &tracker.refresh_db().await.expect("TODO: panic message");
+            tracker.refresh_db().await.expect("TODO: panic message");
             tokio::time::sleep(Duration::from_secs(600)).await;
         }
     };
@@ -36,7 +39,7 @@ pub async fn epg_sync_startup() {
                 Some(Ok(value)) => {
                     let id = value.id;
                     let p = get_program(&tracker.m_conf, id).expect("TODO: panic message");
-                    &tracker.update_db(vec![p]).await.unwrap();
+                    tracker.update_db(vec![p]).await.unwrap();
                     continue
                 },
                 Some(Err(e)) => {
@@ -51,9 +54,7 @@ pub async fn epg_sync_startup() {
     tokio::select! {
         _ = periodic => {  },
         _ = event => {  },
-        _ = tokio::signal::ctrl_c() => {  }
     }
-
 }
 
 
@@ -67,7 +68,7 @@ struct ProgramsIndexManager {
 }
 
 impl ProgramsIndexManager {
-    pub async fn new<S: Into<String> + Sized, T: Into<String> + Sized>(
+    async fn new<S: Into<String> + Sized, T: Into<String> + Sized>(
         m_url: S,
         db_url: T,
     ) -> Self {
@@ -96,9 +97,13 @@ impl ProgramsIndexManager {
         }
     }
 
-    pub async fn update_db(&self, item_delta: Vec<Program>) -> Result<(), Error> {
+    async fn update_db(&self, item_delta: Vec<Program>) -> Result<(), Error> {
+        // Update Meilisearch
         let task = self.index.add_or_update(&item_delta, Some("id")).await?;
         task.wait_for_completion(&self.search_client, None, None).await.unwrap();
+
+        // Update the queued reservation if matches
+        // Q_RESERVED.lock()
         Ok(())
     }
 }
