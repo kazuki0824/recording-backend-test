@@ -14,10 +14,9 @@ pub(crate) async fn fetch_channels(c: &Configuration) -> ChannelsReturnType {
     Ok(channels
         .into_iter()
         .map(|channel| {
-            println!("{:?}", channel);
-            let services = get_services_by_channel(c, channel._type, &*channel.channel);
+            let services = get_services_by_channel(c, &*channel.r#type.to_string(), &*channel.channel);
             Channel {
-                _type: channel._type,
+                r#type: channel.r#type,
                 channel: channel.channel,
                 space: channel.space,
                 name: channel.name,
