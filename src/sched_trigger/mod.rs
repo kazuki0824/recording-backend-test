@@ -3,6 +3,7 @@ use std::sync::Mutex;
 
 use chrono::{DateTime, Duration, Local};
 use log::info;
+use serde_derive::{Serialize, Deserialize};
 use mirakurun_client::models::Program;
 use tokio::sync::mpsc::Sender;
 use ulid::Ulid;
@@ -11,14 +12,28 @@ use crate::recording_pool::{RecordControlMessage, RecordingTaskDescription};
 
 pub(crate) static Q_RESERVED: Mutex<Vec<Reservation>> = Mutex::new(vec![]);
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Reservation {
     program: Program,
-    pub(crate) plan_id: Option<Ulid>, // If it is added through a plan (e.g. Record all of the items in the series), its uuid is stored here.
+    pub(crate) plan_id: Option<u128>, // If it is added through a plan (e.g. Record all of the items in the series), its uuid is stored here.
     is_active: bool
 }
 
 pub(crate) async fn scheduler_startup(tx: Sender<RecordControlMessage>) -> ! {
+    //Import schedules
+    {
+        Q_RESERVED.lock() = {
+            let str = std::fs::read("q_schedules.json")?;
+            let items: Vec<RecordingTaskDescription> = serde_json::from_slice(&str)
+                .unwrap();
+
+            items.into_iter().map(|info| {
+                let task_id = Ulid::new();
+                (task_id, RecordingTask::new(task_id, info, tx.clone()))
+            }).collect()
+        };
+    }
+
 
     loop {
         info!("Now locking Q_RESERVED.");

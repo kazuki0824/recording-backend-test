@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Local};
 use log::info;
+use serde_derive::{Serialize, Deserialize};
 use tokio::sync::mpsc::{Receiver, Sender};
 use ulid::Ulid;
 
@@ -20,7 +21,7 @@ pub(crate) enum RecordControlMessage {
 }
 
 // Recomposed from Program.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RecordingTaskDescription {
     pub title: String,
     pub mirakurun_id: i64,
@@ -35,8 +36,14 @@ pub(crate) async fn recording_pool_startup(
     // Import tasks left behind
     let mut q_recording = {
         let str = std::fs::read("q_recording.json")?;
+        let items: Vec<RecordingTaskDescription> = serde_json::from_slice(&str)
+            .unwrap();
+
         BTreeMap::<Ulid, RecordingTask>::from_iter(
-            mirakurun_client::from_str(str.into())
+            items.into_iter().map(|info| {
+                let task_id = Ulid::new();
+                (task_id, RecordingTask::new(task_id, info, tx.clone()))
+            })
         )
     };
 
@@ -75,10 +82,11 @@ pub(crate) async fn recording_pool_startup(
     }
 
     //Export remaining tasks
-    let queue_item_exported = q_recording.into_values().map(|item| item.info).collect();
-    match mirakurun_client::to_string(queue_item_exported) {
+    let queue_item_exported: Vec<RecordingTaskDescription> =
+        q_recording.into_values().map(|item| item.info).collect();
+    match serde_json::to_string(&queue_item_exported) {
         Ok(str) => std::fs::write("q_recording.json", str),
-        Err(e) => e
+        Err(e) => panic!("Serialization failed.")
     }
 
 }
