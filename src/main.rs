@@ -1,16 +1,14 @@
 use crate::{
-    epg_syncer::epg_sync_startup,
+    api::api_startup, epg_syncer::epg_sync_startup, recording_pool::recording_pool_startup,
     sched_trigger::scheduler_startup,
-    recording_pool::recording_pool_startup,
-    api::api_startup
 };
 
 mod api;
 mod epg_syncer;
 mod mirakurun_client;
+mod recording_planner;
 mod recording_pool;
 mod sched_trigger;
-mod recording_planner;
 
 #[tokio::main]
 async fn main() {
@@ -31,5 +29,4 @@ async fn main() {
 
         _ = tokio::signal::ctrl_c() => { println!("First signal: gracefully exitting...") }
     }
-
 }

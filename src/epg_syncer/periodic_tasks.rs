@@ -2,7 +2,7 @@ use meilisearch_sdk::errors::Error;
 
 use crate::epg_syncer::ProgramsIndexManager;
 use crate::mirakurun_client::{
-    ChannelsReturnType, fetch_channels, fetch_programmes, ProgramsReturnType,
+    fetch_channels, fetch_programmes, ChannelsReturnType, ProgramsReturnType,
 };
 
 impl ProgramsIndexManager {
