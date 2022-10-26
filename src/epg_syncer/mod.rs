@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use log::info;
@@ -8,17 +9,21 @@ use meilisearch_sdk::indexes::Index;
 use mirakurun_client::apis::configuration::Configuration;
 use mirakurun_client::apis::programs_api::get_program;
 use mirakurun_client::models::Program;
+use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
-
-use crate::sched_trigger::Q_RESERVED;
+use crate::SchedQueue;
 
 mod events_stream;
 mod periodic_tasks;
-mod query;
 
-pub(crate) async fn epg_sync_startup() {
-    let tracker =
-        ProgramsIndexManager::new("http://localhost:40772/api", "http://localhost:7700/").await.unwrap();
+pub(crate) async fn epg_sync_startup(sched_ptr: Arc<Mutex<SchedQueue>>) {
+    let tracker = ProgramsIndexManager::new(
+        "http://localhost:40772/api",
+        "http://localhost:7700/",
+        Some(sched_ptr)
+    )
+        .await
+        .unwrap();
 
     let periodic = async {
         let sec = 600;
@@ -39,22 +44,18 @@ pub(crate) async fn epg_sync_startup() {
 
         // filter
         loop {
-            match stream.next().await
-            {
+            match stream.next().await {
                 Some(Ok(value)) => {
                     let id = value.id;
                     let p = get_program(&tracker.m_conf, id).expect("TODO: panic message");
                     tracker.update_programs(vec![p]).await.unwrap();
-                    continue
-                },
-                Some(Err(e)) => {
-                    return Err(e)
-                },
-                None => return Ok(())
+                    continue;
+                }
+                Some(Err(e)) => return Err(e),
+                None => return Ok(()),
             }
         }
     };
-
 
     tokio::select! {
         _ = periodic => {  },
@@ -62,20 +63,21 @@ pub(crate) async fn epg_sync_startup() {
     }
 }
 
-
 ///
-struct ProgramsIndexManager {
+pub(crate) struct ProgramsIndexManager {
     m_conf: Configuration,
     search_client: Client,
     index: Index,
+    sched_ptr: Option<Arc<Mutex<SchedQueue>>>
     // TODO: channels_cache
     // TODO: programs_cache
 }
 
 impl ProgramsIndexManager {
-    async fn new<S: Into<String> + Sized, T: Into<String> + Sized>(
+    pub(crate) async fn new<S: Into<String> + Sized, T: Into<String> + Sized>(
         m_url: S,
         db_url: T,
+        sched_ptr: Option<Arc<Mutex<SchedQueue>>>
     ) -> Result<ProgramsIndexManager, Error> {
         // Initialize Mirakurun
         let mut m_conf = Configuration::new();
@@ -88,12 +90,8 @@ impl ProgramsIndexManager {
         let index = match search_client.get_index("_programs").await {
             Ok(index) => index,
             Err(e) => {
-                let task = search_client
-                    .create_index("_programs", Some("id"))
-                    .await?;
-                let task = task
-                    .wait_for_completion(&search_client, None, None)
-                    .await?;
+                let task = search_client.create_index("_programs", Some("id")).await?;
+                let task = task.wait_for_completion(&search_client, None, None).await?;
                 task.try_make_index(&search_client).unwrap()
             }
         };
@@ -102,16 +100,27 @@ impl ProgramsIndexManager {
             m_conf,
             search_client,
             index,
+            sched_ptr
         })
     }
 
-    async fn update_programs(&self, item_delta: Vec<Program>) -> Result<(), Error> {
-        // Update Meilisearch
-        let task = self.index.add_or_update(&item_delta, Some("id")).await?;
-        task.wait_for_completion(&self.search_client, None, Some(Duration::from_secs(60))).await.unwrap();
+    async fn update_programs(&self, items_delta: Vec<Program>) -> Result<(), Error> {
+        assert!(self.sched_ptr.is_some());
 
-        // Update the queued reservation if matches
-        // Q_RESERVED.lock()
+        // Update Meilisearch
+        let task = self.index.add_or_update(&items_delta, Some("id")).await?;
+        task.wait_for_completion(&self.search_client, None, Some(Duration::from_secs(60)))
+            .await
+            .unwrap();
+
+        // Update the queued reservation(s) if matches;
+        for item_old in self.sched_ptr.as_ref().unwrap().lock().await.items.iter_mut() {
+            for item_new in items_delta.iter() {
+                if item_old.program.id == item_new.id {
+                    item_old.program = item_new.clone();
+                }
+            }
+        }
         Ok(())
     }
 }

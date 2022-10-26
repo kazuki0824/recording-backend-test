@@ -1,7 +1,11 @@
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use crate::recording_pool::pool::RecTaskQueue;
 use crate::{
     api::api_startup, epg_syncer::epg_sync_startup, recording_pool::recording_pool_startup,
     sched_trigger::scheduler_startup,
 };
+use crate::sched_trigger::SchedQueue;
 
 mod api;
 mod epg_syncer;
@@ -19,13 +23,18 @@ async fn main() {
     //Create Recording Queue Notifier
     let (rqn_tx, rqn_rx) = tokio::sync::mpsc::channel(100);
 
+    //Deserialize
+    let q_recording = Arc::new(Mutex::new(RecTaskQueue::new(rqn_tx.clone()).unwrap()));
+    let q_schedules = Arc::new(Mutex::new(SchedQueue {items: vec![]}));
+    //let rules;
+
     // Spawn epg_syncer
     tokio::select! {
-        _ = epg_sync_startup() => {  },
-        _ = scheduler_startup(rqn_tx.clone()) => {  },
-        _ = recording_pool_startup(rqn_tx, rqn_rx) => {  },
+        _ = epg_sync_startup(q_schedules.clone()) => {  },
+        _ = scheduler_startup(q_schedules.clone(), rqn_tx.clone()) => {  },
+        _ = recording_pool_startup(q_recording.clone(), rqn_tx.clone(), rqn_rx) => {  },
 
-        _ = api_startup() => {  },
+        _ = api_startup(q_schedules.clone(), q_recording.clone()) => {  },
 
         _ = tokio::signal::ctrl_c() => { println!("First signal: gracefully exitting...") }
     }

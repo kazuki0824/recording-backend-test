@@ -1,51 +1,77 @@
-/// Ser/des for recording_pool. Contents are serialized on drop automatically.
-
-use std::collections::BTreeMap;
-use std::io::Read;
-use tokio::sync::mpsc::Sender;
-use ulid::Ulid;
 use crate::recording_pool::recording_task::RecordingTask;
 use crate::recording_pool::{RecordControlMessage, RecordingTaskDescription};
+use log::{info, warn};
+/// Ser/des for recording_pool. Contents are serialized on drop automatically.
+use std::collections::BTreeMap;
+use std::io::Read;
+use std::path::Path;
+use tokio::sync::mpsc::Sender;
+use ulid::Ulid;
 
-pub struct RecTaskQueue
-{
+pub(crate) struct RecTaskQueue {
     inner: BTreeMap<Ulid, RecordingTask>,
 }
 
-impl RecTaskQueue
-{
+impl RecTaskQueue {
     pub(crate) fn new(tx: Sender<RecordControlMessage>) -> Result<RecTaskQueue, std::io::Error> {
         // Import tasks left behind in the previous session
-        let mut inner = {
-            let mut str: String = "".to_string();
-            std::fs::File::create("q_recording.json")?.read_to_string(&mut str)?;
-            let items: Vec<RecordingTaskDescription> = serde_json::from_str(&str).unwrap();
+        let inner = {
+            let path = Path::new("q_recording.json");
+            if path.exists() {
+                let mut str: String = "".to_string();
+                std::fs::File::open("q_recording.json")?.read_to_string(&mut str)?;
 
-            BTreeMap::<Ulid, RecordingTask>::from_iter(items.into_iter().map(|info| {
-                let task_id = Ulid::new();
-                (task_id, RecordingTask::new(task_id, info, tx.clone()))
-            }))
+                match serde_json::from_str::<Vec<RecordingTaskDescription>>(&str) {
+                    Ok(items) => Some(BTreeMap::<Ulid, RecordingTask>::from_iter(
+                        items.into_iter().map(|info| {
+                            let task_id = Ulid::new();
+                            (task_id, RecordingTask::new(task_id, info, tx.clone()))
+                        }),
+                    )),
+                    Err(e) => {
+                        warn!("{}", e);
+                        None
+                    }
+                }
+            } else {
+                None
+            }
         };
 
+        let inner = inner.unwrap_or_else(|| {
+            info!("No valid q_recording.json is found. It'll be created or overwritten just before exiting.");
+            BTreeMap::<Ulid, RecordingTask>::new()
+        });
+
+        info!("q_recording successfully loaded. {} items.", inner.len());
         Ok(RecTaskQueue { inner })
     }
-    pub(crate) fn try_add(&mut self, info: RecordingTaskDescription, tx: Sender<RecordControlMessage>) -> bool {
-        if self.inner
+    pub(crate) fn try_add(
+        &mut self,
+        info: RecordingTaskDescription,
+        tx: Sender<RecordControlMessage>,
+    ) -> bool {
+        if self
+            .inner
             .iter()
             .all(|item| item.1.info.mirakurun_id != info.mirakurun_id)
         {
             let task_id = Ulid::new();
-            self.inner.insert(task_id, RecordingTask::new(task_id, info, tx.clone()));
+            self.inner
+                .insert(task_id, RecordingTask::new(task_id, info, tx.clone()));
             true
+        } else {
+            false
         }
-        else { false }
     }
     pub(crate) fn try_remove(&mut self, id: Ulid) -> bool {
         if self.inner.contains_key(&id) {
             self.inner.remove(&id);
+            info!("{} is removed from q_recording", id);
             true
+        } else {
+            false
         }
-        else { false }
     }
     pub(crate) fn at(&self, id: Ulid) -> Option<&RecordingTaskDescription> {
         self.inner.get(&id).map(|f| &f.info)
@@ -58,16 +84,18 @@ impl RecTaskQueue
     }
 }
 
-
-impl Drop for RecTaskQueue
-{
+impl Drop for RecTaskQueue {
     fn drop(&mut self) {
         //Export remaining tasks
         let queue_item_exported: Vec<RecordingTaskDescription> =
             self.iter().map(|f| f.clone()).collect();
-        let _result = match serde_json::to_string(&queue_item_exported) {
-            Ok(str) => std::fs::write("q_recording.json", str),
+        let path = Path::new("q_recording.json").canonicalize().unwrap();
+        let result = match serde_json::to_string(&queue_item_exported) {
+            Ok(str) => std::fs::write(&path, str),
             Err(e) => panic!("Serialization failed."),
         };
+        if result.is_ok() {
+            println!("q_recording is saved in {}.", path.display())
+        }
     }
 }
