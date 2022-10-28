@@ -7,8 +7,10 @@ rust-version = "1.63" #Because of sched_trigger/mod.rs:3
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+keyring = "1.2.0"
 log = "~0.4.0"
 env_logger = "~0.9.0"
+structopt = "0.3.26"
 
 mirakurun_client = { path = "../mirakurun_client" }
 meilisearch-sdk = { path = "../../meilisearch-sdk" }
@@ -19,9 +21,11 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "si
 tokio-stream = "~0.1"
 pin-project-lite = "0.2.9"
 ulid = "^1.0"
+
 serde = "^1.0"
 serde_derive = "^1.0"
 serde_json = "^1.0"
+
 
 [profile.release]
 lto = true

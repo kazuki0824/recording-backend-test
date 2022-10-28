@@ -1,10 +1,13 @@
 use std::sync::Arc;
+
+use structopt::StructOpt;
 use tokio::sync::Mutex;
-use crate::recording_pool::pool::RecTaskQueue;
+
 use crate::{
     api::api_startup, epg_syncer::epg_sync_startup, recording_pool::recording_pool_startup,
     sched_trigger::scheduler_startup,
 };
+use crate::recording_pool::pool::RecTaskQueue;
 use crate::sched_trigger::SchedQueue;
 
 mod api;
@@ -13,6 +16,17 @@ mod mirakurun_client;
 mod recording_planner;
 mod recording_pool;
 mod sched_trigger;
+
+#[derive(Debug, StructOpt)]
+#[structopt(name = "meister", about = "An example of StructOpt usage.")]
+struct Opt {
+    #[structopt(default_value = "http://localhost:40772/api")]
+    mirakurun_base_uri: String,
+    #[structopt(default_value = "http://localhost:7700/")]
+    meilisearch_base_uri: String,
+    #[structopt(short)]
+    meilisearch_api_key: Option<String>,
+}
 
 #[tokio::main]
 async fn main() {
@@ -25,7 +39,7 @@ async fn main() {
 
     //Deserialize
     let q_recording = Arc::new(Mutex::new(RecTaskQueue::new(rqn_tx.clone()).unwrap()));
-    let q_schedules = Arc::new(Mutex::new(SchedQueue {items: vec![]}));
+    let q_schedules = Arc::new(Mutex::new(SchedQueue { items: vec![] }));
     //let rules;
 
     // Spawn epg_syncer

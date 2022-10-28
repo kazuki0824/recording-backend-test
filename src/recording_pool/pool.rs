@@ -1,12 +1,14 @@
-use crate::recording_pool::recording_task::RecordingTask;
-use crate::recording_pool::{RecordControlMessage, RecordingTaskDescription};
-use log::{info, warn};
 /// Ser/des for recording_pool. Contents are serialized on drop automatically.
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::Path;
+
+use log::{info, warn};
 use tokio::sync::mpsc::Sender;
 use ulid::Ulid;
+
+use crate::recording_pool::{RecordControlMessage, RecordingTaskDescription};
+use crate::recording_pool::recording_task::RecordingTask;
 
 pub(crate) struct RecTaskQueue {
     inner: BTreeMap<Ulid, RecordingTask>,
@@ -92,7 +94,7 @@ impl Drop for RecTaskQueue {
         let path = Path::new("q_recording.json").canonicalize().unwrap();
         let result = match serde_json::to_string(&queue_item_exported) {
             Ok(str) => std::fs::write(&path, str),
-            Err(e) => panic!("Serialization failed."),
+            Err(e) => panic!("Serialization failed. {}", e),
         };
         if result.is_ok() {
             println!("q_recording is saved in {}.", path.display())

@@ -9,21 +9,24 @@ use meilisearch_sdk::indexes::Index;
 use mirakurun_client::apis::configuration::Configuration;
 use mirakurun_client::apis::programs_api::get_program;
 use mirakurun_client::models::Program;
+use structopt::StructOpt;
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
-use crate::SchedQueue;
+
+use crate::{Opt, SchedQueue};
 
 mod events_stream;
 mod periodic_tasks;
 
 pub(crate) async fn epg_sync_startup(sched_ptr: Arc<Mutex<SchedQueue>>) {
+    let args = Opt::from_args();
     let tracker = ProgramsIndexManager::new(
-        "http://localhost:40772/api",
-        "http://localhost:7700/",
-        Some(sched_ptr)
+        args.mirakurun_base_uri,
+        args.meilisearch_base_uri,
+        Some(sched_ptr),
     )
-        .await
-        .unwrap();
+    .await
+    .unwrap();
 
     let periodic = async {
         let sec = 600;
@@ -77,7 +80,7 @@ impl ProgramsIndexManager {
     pub(crate) async fn new<S: Into<String> + Sized, T: Into<String> + Sized>(
         m_url: S,
         db_url: T,
-        sched_ptr: Option<Arc<Mutex<SchedQueue>>>
+        sched_ptr: Option<Arc<Mutex<SchedQueue>>>,
     ) -> Result<ProgramsIndexManager, Error> {
         // Initialize Mirakurun
         let mut m_conf = Configuration::new();
@@ -100,7 +103,7 @@ impl ProgramsIndexManager {
             m_conf,
             search_client,
             index,
-            sched_ptr
+            sched_ptr,
         })
     }
 
@@ -114,7 +117,15 @@ impl ProgramsIndexManager {
             .unwrap();
 
         // Update the queued reservation(s) if matches;
-        for item_old in self.sched_ptr.as_ref().unwrap().lock().await.items.iter_mut() {
+        for item_old in self
+            .sched_ptr
+            .as_ref()
+            .unwrap()
+            .lock()
+            .await
+            .items
+            .iter_mut()
+        {
             for item_new in items_delta.iter() {
                 if item_old.program.id == item_new.id {
                     item_old.program = item_new.clone();
