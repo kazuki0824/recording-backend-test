@@ -35,7 +35,7 @@ impl Drop for SchedQueue {
 pub(crate) struct Schedule {
     pub(crate) program: Program,
     pub(crate) plan_id: Option<u128>, // If it is added through a plan (e.g. Record all of the items in the series), its uuid is stored here.
-    is_active: bool,
+    pub(crate) is_active: bool,
 }
 
 pub(crate) async fn scheduler_startup(
@@ -96,9 +96,9 @@ pub(crate) async fn scheduler_startup(
             }
             // Drop expired item
             q_schedules.items.retain(|item| {
-                let time =
+                let end_of_program =
                     item.program.start_at + Duration::milliseconds(item.program.duration as i64);
-                time < Local::now()
+                end_of_program > Local::now()
             });
             remainder = q_schedules.items.len();
 

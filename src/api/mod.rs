@@ -1,16 +1,17 @@
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::{Router, routing::get};
-use axum::http::StatusCode;
+use axum::{response, Router, routing::{get, put}};
+use axum::response::IntoResponse;
 use log::info;
-use meilisearch_sdk::client::Client;
-use mirakurun_client::models::Program;
 use structopt::StructOpt;
 use tokio::sync::Mutex;
 
 use crate::{Opt, RecTaskQueue, SchedQueue};
+use crate::db_utils::{get_all_programs, get_temporary_accessor, pull_program};
 use crate::recording_pool::RecordingTaskDescription;
+use crate::sched_trigger::Schedule;
 
 mod db;
 
@@ -20,6 +21,7 @@ pub(crate) async fn api_startup(
 ) {
     let q_schedules1 = q_schedules.clone();
     let q_schedules2 = q_schedules.clone();
+    let q_schedules3 = q_schedules.clone();
     let app =
         Router::new()
             .route(
@@ -32,17 +34,11 @@ pub(crate) async fn api_startup(
                 "/programs",
                 get(|| async {
                     let args = Opt::from_args();
-                    let search_client = Client::new(args.meilisearch_base_uri, "masterKey");
-                    let res = match search_client.get_index("_programs").await {
-                        Ok(f) => {
-                            f.get_documents::<Program>().await
-                        },
-                        Err(e) => Err(e)
-                    };
-
+                    let client = get_temporary_accessor();
+                    let res = get_all_programs(&client).await;
                     match res {
-                        Ok(res) => (StatusCode::OK, serde_json::to_string(&res.results).unwrap()),
-                        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                        Ok(res) => Ok(response::Json(res)),
+                        Err(e) => Err(e.to_string().into_response())
                     }
                 }),
             )
@@ -63,7 +59,8 @@ pub(crate) async fn api_startup(
                         .collect::<Vec<RecordingTaskDescription>>();
                     serde_json::to_string(&obj).unwrap()
                 }),
-            );
+            )
+            .route("/new/sched", put(move |p| async move { put_recording_schedule(q_schedules3, p).await }));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     info!("listening on {}", addr);
@@ -71,4 +68,32 @@ pub(crate) async fn api_startup(
         .serve(app.into_make_service())
         .await
         .unwrap();
+}
+
+
+async fn put_recording_schedule(schedules: Arc<Mutex<SchedQueue>>,
+                                axum::extract::Query(params):
+                                axum::extract::Query<HashMap<String, String>>) -> Result<response::Json<Schedule>, String>
+{
+    let program = {
+        let client = get_temporary_accessor();
+        // Check input
+        let id = params.get("id").ok_or("invalid query string\n")?
+            .parse::<i64>().map_err(|e| e.to_string())?;
+        // Pull
+        pull_program(&client, id).await.or_else(|e| Err(e.to_string()))?
+    };
+    let s = Schedule{
+        program,
+        plan_id: None,
+        is_active: true
+    };
+    schedules.lock().await.items.push(s.clone());
+    info!("Program {:?} (service_id={}, network_id={}, event_id={}) has been successfully added to sched_trigger.",
+        &s.program.description,
+        &s.program.service_id,
+        &s.program.network_id,
+        &s.program.event_id,
+    );
+    Ok(response::Json(s))
 }

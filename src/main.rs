@@ -11,6 +11,7 @@ use crate::recording_pool::pool::RecTaskQueue;
 use crate::sched_trigger::SchedQueue;
 
 mod api;
+mod db_utils;
 mod epg_syncer;
 mod mirakurun_client;
 mod recording_planner;
