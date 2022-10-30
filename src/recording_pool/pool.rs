@@ -1,7 +1,7 @@
 /// Ser/des for recording_pool. Contents are serialized on drop automatically.
 use std::collections::BTreeMap;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use log::{info, warn};
 use tokio::sync::mpsc::Sender;
@@ -18,10 +18,10 @@ impl RecTaskQueue {
     pub(crate) fn new(tx: Sender<RecordControlMessage>) -> Result<RecTaskQueue, std::io::Error> {
         // Import tasks left behind in the previous session
         let inner = {
-            let path = Path::new("q_recording.json");
+            let path = Path::new("./q_recording.json");
             if path.exists() {
                 let mut str: String = "".to_string();
-                std::fs::File::open("q_recording.json")?.read_to_string(&mut str)?;
+                std::fs::File::open(path.canonicalize()?)?.read_to_string(&mut str)?;
 
                 match serde_json::from_str::<Vec<RecordingTaskDescription>>(&str) {
                     Ok(items) => Some(BTreeMap::<Ulid, RecordingTask>::from_iter(
@@ -91,7 +91,8 @@ impl Drop for RecTaskQueue {
         //Export remaining tasks
         let queue_item_exported: Vec<RecordingTaskDescription> =
             self.iter().map(|f| f.clone()).collect();
-        let path = Path::new("q_recording.json").canonicalize().unwrap();
+        let path = Path::new("./q_recording.json").canonicalize()
+            .unwrap_or(PathBuf::from("./q_recording.json"));
         let result = match serde_json::to_string(&queue_item_exported) {
             Ok(str) => std::fs::write(&path, str),
             Err(e) => panic!("Serialization failed. {}", e),

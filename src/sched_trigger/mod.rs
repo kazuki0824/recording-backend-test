@@ -1,6 +1,6 @@
 use std::cell::Cell;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Local};
@@ -20,13 +20,14 @@ pub(crate) struct SchedQueue {
 impl Drop for SchedQueue {
     fn drop(&mut self) {
         //Export remaining tasks
-        let path = Path::new("q_recording.json").canonicalize().unwrap();
+        let path = Path::new("./q_schedules.json").canonicalize()
+            .unwrap_or(PathBuf::from("./q_schedules.json"));
         let result = match serde_json::to_string(&self.items) {
             Ok(str) => std::fs::write(&path, str),
             Err(e) => panic!("Serialization failed. {}", e),
         };
         if result.is_ok() {
-            println!("q_recording is saved in {}.", path.display())
+            println!("q_schedules is saved in {}.", path.display())
         }
     }
 }
@@ -45,10 +46,10 @@ pub(crate) async fn scheduler_startup(
     //Import all the previously stored schedules
     {
         q_schedules.lock().await.items.append(&mut {
-            let path = Path::new("q_schedules.json");
+            let path = Path::new("./q_schedules.json");
             let schedules=
                 if path.exists() {
-                    let str = std::fs::read("q_schedules.json")?;
+                    let str = std::fs::read(path.canonicalize()?)?;
                     match serde_json::from_slice::<Vec<Schedule>>(&str)
                     {
                         Ok(items) => Some(items),
