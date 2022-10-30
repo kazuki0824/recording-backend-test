@@ -88,7 +88,14 @@ async fn put_recording_schedule(schedules: Arc<Mutex<SchedQueue>>,
         plan_id: None,
         is_active: true
     };
-    schedules.lock().await.items.push(s.clone());
+
+    let mut items = &mut schedules.lock().await.items;
+    if items.iter().all(|f| f.program.id != s.program.id)
+    {
+        items.push(s.clone());
+    }
+
+
     info!("Program {:?} (service_id={}, network_id={}, event_id={}) has been successfully added to sched_trigger.",
         &s.program.description,
         &s.program.service_id,
