@@ -2,18 +2,20 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::{response, Router, routing::{get, put}};
 use axum::response::IntoResponse;
+use axum::{
+    response,
+    routing::{get, put},
+    Router,
+};
 use log::info;
 use structopt::StructOpt;
 use tokio::sync::Mutex;
 
-use crate::{Opt, RecTaskQueue, SchedQueue};
 use crate::db_utils::{get_all_programs, get_temporary_accessor, pull_program};
 use crate::recording_pool::RecordingTaskDescription;
 use crate::sched_trigger::Schedule;
-
-mod db;
+use crate::{Opt, RecTaskQueue, SchedQueue};
 
 pub(crate) async fn api_startup(
     q_schedules: Arc<Mutex<SchedQueue>>,
@@ -38,7 +40,7 @@ pub(crate) async fn api_startup(
                     let res = get_all_programs(&client).await;
                     match res {
                         Ok(res) => Ok(response::Json(res)),
-                        Err(e) => Err(e.to_string().into_response())
+                        Err(e) => Err(e.to_string().into_response()),
                     }
                 }),
             )
@@ -60,7 +62,10 @@ pub(crate) async fn api_startup(
                     serde_json::to_string(&obj).unwrap()
                 }),
             )
-            .route("/new/sched", put(move |p| async move { put_recording_schedule(q_schedules3, p).await }));
+            .route(
+                "/new/sched",
+                put(move |p| async move { put_recording_schedule(q_schedules3, p).await }),
+            );
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     info!("listening on {}", addr);
@@ -70,31 +75,33 @@ pub(crate) async fn api_startup(
         .unwrap();
 }
 
-
-async fn put_recording_schedule(schedules: Arc<Mutex<SchedQueue>>,
-                                axum::extract::Query(params):
-                                axum::extract::Query<HashMap<String, String>>) -> Result<response::Json<Schedule>, String>
-{
+async fn put_recording_schedule(
+    schedules: Arc<Mutex<SchedQueue>>,
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> Result<response::Json<Schedule>, String> {
     let program = {
         let client = get_temporary_accessor();
         // Check input
-        let id = params.get("id").ok_or("invalid query string\n")?
-            .parse::<i64>().map_err(|e| e.to_string())?;
+        let id = params
+            .get("id")
+            .ok_or("invalid query string\n")?
+            .parse::<i64>()
+            .map_err(|e| e.to_string())?;
         // Pull
-        pull_program(&client, id).await.or_else(|e| Err(e.to_string()))?
+        pull_program(&client, id)
+            .await
+            .or_else(|e| Err(e.to_string()))?
     };
-    let s = Schedule{
+    let s = Schedule {
         program,
         plan_id: None,
-        is_active: true
+        is_active: true,
     };
 
     let mut items = &mut schedules.lock().await.items;
-    if items.iter().all(|f| f.program.id != s.program.id)
-    {
+    if items.iter().all(|f| f.program.id != s.program.id) {
         items.push(s.clone());
     }
-
 
     info!("Program {:?} (service_id={}, network_id={}, event_id={}) has been successfully added to sched_trigger.",
         &s.program.description,

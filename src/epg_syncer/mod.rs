@@ -12,8 +12,8 @@ use structopt::StructOpt;
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
 
-use crate::{Opt, SchedQueue};
 use crate::db_utils::{push_programs_ranges, push_services_ranges};
+use crate::{Opt, SchedQueue};
 
 mod events_stream;
 mod periodic_tasks;
@@ -35,9 +35,8 @@ pub(crate) struct EpgSyncManager {
     search_client: Client,
     index_programs: Index,
     index_services: Index,
-    sched_ptr: Option<Arc<Mutex<SchedQueue>>>
+    sched_ptr: Option<Arc<Mutex<SchedQueue>>>,
 }
-
 
 impl EpgSyncManager {
     pub(crate) async fn new<S: Into<String> + Sized, T: Into<String> + Sized>(
@@ -53,8 +52,7 @@ impl EpgSyncManager {
         let search_client = Client::new(db_url, "masterKey");
 
         // Try to get the inner index if the task succeeded
-        let index_programs
-            = match search_client.get_index("_programs").await {
+        let index_programs = match search_client.get_index("_programs").await {
             Ok(index) => index,
             Err(_) => {
                 let task = search_client.create_index("_programs", Some("id")).await?;
@@ -62,8 +60,7 @@ impl EpgSyncManager {
                 task.try_make_index(&search_client).unwrap()
             }
         };
-        let index_services
-            = match search_client.get_index("_services").await {
+        let index_services = match search_client.get_index("_services").await {
             Ok(index) => index,
             Err(_) => {
                 let task = search_client.create_index("_services", Some("id")).await?;
@@ -77,7 +74,7 @@ impl EpgSyncManager {
             search_client,
             index_programs,
             index_services,
-            sched_ptr
+            sched_ptr,
         };
 
         let periodic = async {
@@ -100,7 +97,7 @@ impl EpgSyncManager {
                     Err(e) => {
                         error!("{:#?}", e);
                         error!("Reconecting to Events API.");
-                        continue
+                        continue;
                     }
                 };
 
@@ -108,12 +105,14 @@ impl EpgSyncManager {
                 'inner: loop {
                     let next_str = match stream.next().await {
                         Some(Ok(line)) => {
-                            if line.trim().eq_ignore_ascii_case("[") { continue };
+                            if line.trim().eq_ignore_ascii_case("[") {
+                                continue;
+                            };
                             debug!("{}", line);
                             info!("length = {}", line.len());
                             line
-                        },
-                        _ => continue
+                        }
+                        _ => continue,
                     };
 
                     match serde_json::from_str(&next_str) {
@@ -122,37 +121,43 @@ impl EpgSyncManager {
                             match push_services_ranges(&tracker.index_services, &vec![value]).await
                             {
                                 Ok(_) => info!("Updates have been successfully applied."),
-                                Err(e) => error!("{}", e)
+                                Err(e) => error!("{}", e),
                             }
                             continue;
                         }
                         Ok(Program(value)) => {
                             info!("EIT[p/f] from Mirakurun. {:#?}", &value);
-                            match push_programs_ranges(&tracker.index_programs, &vec![value.clone()]).await
+                            match push_programs_ranges(
+                                &tracker.index_programs,
+                                &vec![value.clone()],
+                            )
+                            .await
                             {
                                 Ok(_) => {
                                     info!("Updates have been successfully applied.");
                                     // Update schedules
                                     if let Some(sched_ptr) = &tracker.sched_ptr {
-                                        sched_ptr.lock().await.items
-                                            .iter_mut()
-                                            .for_each(|mut f| {
+                                        sched_ptr.lock().await.items.iter_mut().for_each(
+                                            |mut f| {
                                                 if value.id == f.program.id {
                                                     //TODO: Print details
                                                     f.program.start_at = value.start_at;
                                                     f.program.duration = value.duration;
                                                 }
-                                            });
+                                            },
+                                        );
                                     }
                                 }
-                                Err(e) => error!("{}", e)
+                                Err(e) => error!("{}", e),
                             }
                             continue;
                         }
-                        Ok(Tuner(value)) => info!("Tuner configuration has been changed. {:?}", value),
+                        Ok(Tuner(value)) => {
+                            info!("Tuner configuration has been changed. {:?}", value)
+                        }
                         Err(e) => {
-                                error!("In /events, {}", e);
-                                break 'inner;
+                            error!("In /events, {}", e);
+                            break 'inner;
                         }
                     }
                 }

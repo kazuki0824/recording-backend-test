@@ -20,7 +20,8 @@ pub(crate) struct SchedQueue {
 impl Drop for SchedQueue {
     fn drop(&mut self) {
         //Export remaining tasks
-        let path = Path::new("./q_schedules.json").canonicalize()
+        let path = Path::new("./q_schedules.json")
+            .canonicalize()
             .unwrap_or(PathBuf::from("./q_schedules.json"));
         let result = match serde_json::to_string(&self.items) {
             Ok(str) => std::fs::write(&path, str),

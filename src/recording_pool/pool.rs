@@ -7,8 +7,8 @@ use log::{info, warn};
 use tokio::sync::mpsc::Sender;
 use ulid::Ulid;
 
-use crate::recording_pool::{RecordControlMessage, RecordingTaskDescription};
 use crate::recording_pool::recording_task::RecordingTask;
+use crate::recording_pool::{RecordControlMessage, RecordingTaskDescription};
 
 pub(crate) struct RecTaskQueue {
     inner: BTreeMap<Ulid, RecordingTask>,
@@ -91,7 +91,8 @@ impl Drop for RecTaskQueue {
         //Export remaining tasks
         let queue_item_exported: Vec<RecordingTaskDescription> =
             self.iter().map(|f| f.clone()).collect();
-        let path = Path::new("./q_recording.json").canonicalize()
+        let path = Path::new("./q_recording.json")
+            .canonicalize()
             .unwrap_or(PathBuf::from("./q_recording.json"));
         let result = match serde_json::to_string(&queue_item_exported) {
             Ok(str) => std::fs::write(&path, str),

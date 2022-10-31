@@ -3,12 +3,12 @@ use std::sync::Arc;
 use structopt::StructOpt;
 use tokio::sync::Mutex;
 
+use crate::recording_pool::pool::RecTaskQueue;
+use crate::sched_trigger::SchedQueue;
 use crate::{
     api::api_startup, epg_syncer::epg_sync_startup, recording_pool::recording_pool_startup,
     sched_trigger::scheduler_startup,
 };
-use crate::recording_pool::pool::RecTaskQueue;
-use crate::sched_trigger::SchedQueue;
 
 mod api;
 mod db_utils;
