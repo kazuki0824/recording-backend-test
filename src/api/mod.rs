@@ -5,7 +5,7 @@ use std::sync::Arc;
 use axum::response::IntoResponse;
 use axum::{
     response,
-    routing::{get, put},
+    routing::{delete, get, put},
     Router,
 };
 use log::info;
@@ -24,6 +24,7 @@ pub(crate) async fn api_startup(
     let q_schedules1 = q_schedules.clone();
     let q_schedules2 = q_schedules.clone();
     let q_schedules3 = q_schedules.clone();
+    let q_schedules4 = q_schedules.clone();
     let app =
         Router::new()
             .route(
@@ -65,6 +66,10 @@ pub(crate) async fn api_startup(
             .route(
                 "/new/sched",
                 put(move |p| async move { put_recording_schedule(q_schedules3, p).await }),
+            )
+            .route(
+                "/q/sched",
+                delete(|p| { delete_sched(q_schedules4, p) })
             );
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
@@ -110,4 +115,22 @@ async fn put_recording_schedule(
         &s.program.event_id,
     );
     Ok(response::Json(s))
+}
+
+async fn delete_sched(
+    schedules: Arc<Mutex<SchedQueue>>,
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> Result<(), String> {
+
+    // Check input
+    let id = params
+        .get("id")
+        .ok_or("invalid query string\n")?
+        .parse::<i64>()
+        .map_err(|e| e.to_string())?;
+
+    // Delete
+    schedules.lock().await.items.retain(|f| f.program.id == id);
+
+    Ok(())
 }
