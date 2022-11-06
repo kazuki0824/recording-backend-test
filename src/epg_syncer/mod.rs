@@ -20,7 +20,7 @@ mod periodic_tasks;
 
 pub(crate) async fn epg_sync_startup(sched_ptr: Arc<Mutex<SchedQueue>>) {
     let args = Opt::from_args();
-    let tracker = EpgSyncManager::new(
+    EpgSyncManager::new(
         args.mirakurun_base_uri,
         args.meilisearch_base_uri,
         Some(sched_ptr),

@@ -1,41 +1,35 @@
-use std::cell::Cell;
 use std::sync::Arc;
-
-use chrono::{DateTime, Local};
 use log::info;
+use mirakurun_client::models::Program;
+use scoped_threadpool::Pool;
 use serde_derive::{Deserialize, Serialize};
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
-use ulid::Ulid;
-
-use crate::recording_pool::eit_parser::EitParser;
 use crate::recording_pool::pool::RecTaskQueue;
 
-mod eit_parser;
 pub(crate) mod pool;
 mod recording_task;
 
 #[derive(Debug)]
 pub enum RecordControlMessage {
-    Create(RecordingTaskDescription),
-    Update((Ulid, DateTime<Local>, DateTime<Local>)),
-    Remove(Ulid),
+    CreateOrUpdate(RecordingTaskDescription),
+    TryCreate(RecordingTaskDescription),
+    Remove(i64),
 }
 
 // Recomposed from Program.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordingTaskDescription {
-    pub title: String,
-    pub mirakurun_id: i64,
-    pub(crate) start: Cell<DateTime<Local>>,
-    pub(crate) end: Cell<DateTime<Local>>,
+    pub program: Program,
+    pub save_location: String,
 }
 
 pub(crate) async fn recording_pool_startup(
     q_recording: Arc<Mutex<RecTaskQueue>>,
-    tx: Sender<RecordControlMessage>,
     mut rx: Receiver<RecordControlMessage>,
 ) {
+    let pool = Pool::new(4);
+
     // Process messages one after another
     loop {
         let received = rx.recv().await;
@@ -43,20 +37,18 @@ pub(crate) async fn recording_pool_startup(
         if let Some(received) = received.as_ref() {
             info!("Incoming RecordControlMessage:\n {:?}", received);
         }
-        match received {
-            Some(RecordControlMessage::Create(info)) => {
-                q_recording.lock().await.try_add(info, tx.clone());
+        let res = match received {
+            Some(RecordControlMessage::CreateOrUpdate(info)) => {
+                q_recording.lock().await.add(info)
             }
             Some(RecordControlMessage::Remove(id)) => {
                 q_recording.lock().await.try_remove(id);
+                false
             }
-            Some(RecordControlMessage::Update((id, start, end))) => {
-                if let Some(selected_item) = q_recording.lock().await.at(id) {
-                    selected_item.start.set(start);
-                    selected_item.end.set(end);
-                }
+            Some(RecordControlMessage::TryCreate(info)) => {
+                q_recording.lock().await.try_add(info)
             }
-            None => break,
-        }
+            None => continue,
+        };
     }
 }

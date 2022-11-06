@@ -1,5 +1,3 @@
-use std::cell::Cell;
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -9,7 +7,7 @@ use mirakurun_client::models::Program;
 use serde_derive::{Deserialize, Serialize};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
-use ulid::Ulid;
+use crate::recording_planner::PlanId;
 
 use crate::recording_pool::{RecordControlMessage, RecordingTaskDescription};
 
@@ -36,7 +34,7 @@ impl Drop for SchedQueue {
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Schedule {
     pub(crate) program: Program,
-    pub(crate) plan_id: Option<u128>, // If it is added through a plan (e.g. Record all of the items in the series), its uuid is stored here.
+    pub(crate) plan_id: PlanId, // If it is added through a plan (e.g. Record all of the items in the series), its uuid is stored here.
     pub(crate) is_active: bool,
 }
 
@@ -80,22 +78,27 @@ pub(crate) async fn scheduler_startup(
             info!("{} scheduling units found.", found);
 
             for item in q_schedules.items.iter() {
-                let (start, end) = (
-                    item.program.start_at,
-                    item.program.start_at + Duration::milliseconds(item.program.duration as i64),
-                );
-                if is_in_the_recording_range(start.into(), end.into(), Local::now())
+                if is_in_the_recording_range(
+                    item.program.start_at.into(),
+                    (item.program.start_at + Duration::milliseconds(item.program.duration as i64)).into(),
+                    Local::now()
+                )
                     && item.is_active
                 {
-                    let task = RecordingTaskDescription {
-                        title: "".to_string(),
-                        mirakurun_id: item.program.id,
-                        start: Cell::new(Default::default()),
-                        end: Cell::new(Default::default()),
+                    let save_location = match item.plan_id {
+                        PlanId::Word(_) => "",
+                        PlanId::Series(_) => "",
+                        PlanId::None => ""
                     };
-                    tx.send(RecordControlMessage::Create(task)).await.unwrap();
+
+                    let task = RecordingTaskDescription {
+                        program: item.program.clone(),
+                        save_location: save_location.into()
+                    };
+                    tx.send(RecordControlMessage::CreateOrUpdate(task)).await.unwrap();
                 }
             }
+
             // Drop expired item
             q_schedules.items.retain(|item| {
                 let end_of_program =
@@ -121,5 +124,5 @@ fn is_in_the_recording_range(
     right: DateTime<Local>,
     value: DateTime<Local>,
 ) -> bool {
-    (left - Duration::seconds(10) < value) && (value < right)
+    (left - Duration::minutes(10) < value) && (value < right)
 }

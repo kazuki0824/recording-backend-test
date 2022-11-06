@@ -16,6 +16,7 @@ use crate::db_utils::{get_all_programs, get_temporary_accessor, pull_program};
 use crate::recording_pool::RecordingTaskDescription;
 use crate::sched_trigger::Schedule;
 use crate::{Opt, RecTaskQueue, SchedQueue};
+use crate::recording_planner::PlanId;
 
 pub(crate) async fn api_startup(
     q_schedules: Arc<Mutex<SchedQueue>>,
@@ -99,11 +100,11 @@ async fn put_recording_schedule(
     };
     let s = Schedule {
         program,
-        plan_id: None,
+        plan_id: PlanId::None,
         is_active: true,
     };
 
-    let mut items = &mut schedules.lock().await.items;
+    let items = &mut schedules.lock().await.items;
     if items.iter().all(|f| f.program.id != s.program.id) {
         items.push(s.clone());
     }
