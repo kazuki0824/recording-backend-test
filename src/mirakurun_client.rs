@@ -19,13 +19,22 @@ pub(crate) async fn fetch_programmes(c: &Configuration) -> ProgramsReturnType {
 }
 
 pub(crate) async fn get_service_from_program(c: &Configuration, p: &Program) -> Option<Service> {
-    let result = get_services(c, Some(p.service_id), Some(p.network_id), None, None, None, None).await;
+    let result = get_services(
+        c,
+        Some(p.service_id),
+        Some(p.network_id),
+        None,
+        None,
+        None,
+        None,
+    )
+    .await;
     match result {
         Ok(v) if v.len() > 0 => Some(v[0].clone()),
         Err(e) => {
             warn!("{}", e);
             None
         }
-        _ => None
+        _ => None,
     }
 }

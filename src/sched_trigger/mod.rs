@@ -7,8 +7,8 @@ use mirakurun_client::models::Program;
 use serde_derive::{Deserialize, Serialize};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
-use crate::recording_planner::PlanId;
 
+use crate::recording_planner::PlanId;
 use crate::recording_pool::{RecordControlMessage, RecordingTaskDescription};
 
 pub(crate) struct SchedQueue {
@@ -80,22 +80,24 @@ pub(crate) async fn scheduler_startup(
             for item in q_schedules.items.iter() {
                 if is_in_the_recording_range(
                     item.program.start_at.into(),
-                    (item.program.start_at + Duration::milliseconds(item.program.duration as i64)).into(),
-                    Local::now()
-                )
-                    && item.is_active
+                    (item.program.start_at + Duration::milliseconds(item.program.duration as i64))
+                        .into(),
+                    Local::now(),
+                ) && item.is_active
                 {
                     let save_location = match item.plan_id {
                         PlanId::Word(_) => "",
                         PlanId::Series(_) => "",
-                        PlanId::None => ""
+                        PlanId::None => "",
                     };
 
                     let task = RecordingTaskDescription {
                         program: item.program.clone(),
-                        save_location: save_location.into()
+                        save_location: save_location.into(),
                     };
-                    tx.send(RecordControlMessage::CreateOrUpdate(task)).await.unwrap();
+                    tx.send(RecordControlMessage::CreateOrUpdate(task))
+                        .await
+                        .unwrap();
                 }
             }
 

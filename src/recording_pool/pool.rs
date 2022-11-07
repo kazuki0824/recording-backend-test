@@ -12,9 +12,9 @@ use tokio::select;
 use tokio::sync::oneshot::{Receiver, Sender};
 use tokio_util::io::StreamReader;
 
-use crate::Opt;
-use crate::recording_pool::RecordingTaskDescription;
 use crate::recording_pool::recording_task::RecordingTask;
+use crate::recording_pool::RecordingTaskDescription;
+use crate::Opt;
 
 pub(crate) struct RecTaskQueue {
     inner: HashMap<i64, RecordingTaskDescription>,
@@ -147,7 +147,7 @@ async fn generate_task(r: RecordingTaskDescription, rx: Receiver<()>) -> Result<
     } else {
         select! {
             _ = tokio::io::copy(&mut src, &mut task.target.raw_out) => {  },
-            _ = rx => {}
+            _ = rx => {  }
         }
     };
     Ok(())

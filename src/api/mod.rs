@@ -13,10 +13,10 @@ use structopt::StructOpt;
 use tokio::sync::Mutex;
 
 use crate::db_utils::{get_all_programs, get_temporary_accessor, pull_program};
+use crate::recording_planner::PlanId;
 use crate::recording_pool::RecordingTaskDescription;
 use crate::sched_trigger::Schedule;
 use crate::{Opt, RecTaskQueue, SchedQueue};
-use crate::recording_planner::PlanId;
 
 pub(crate) async fn api_startup(
     q_schedules: Arc<Mutex<SchedQueue>>,
@@ -68,10 +68,7 @@ pub(crate) async fn api_startup(
                 "/new/sched",
                 put(move |p| async move { put_recording_schedule(q_schedules3, p).await }),
             )
-            .route(
-                "/q/sched",
-                delete(|p| { delete_sched(q_schedules4, p) })
-            );
+            .route("/q/sched", delete(|p| delete_sched(q_schedules4, p)));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     info!("listening on {}", addr);
@@ -122,7 +119,6 @@ async fn delete_sched(
     schedules: Arc<Mutex<SchedQueue>>,
     axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
 ) -> Result<(), String> {
-
     // Check input
     let id = params
         .get("id")

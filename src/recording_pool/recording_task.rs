@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use pin_project_lite::pin_project;
 
-use crate::recording_pool::RecordingTaskDescription;
 use crate::recording_pool::recording_task::{eit_parser::EitParser, io_object::OutputObject};
+use crate::recording_pool::RecordingTaskDescription;
 
 mod eit_parser;
 mod io_object;
