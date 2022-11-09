@@ -79,6 +79,27 @@ pub(crate) async fn scheduler_startup(
 
             for item in q_schedules.items.iter() {
                 if is_in_the_recording_range(
+                    (item.program.start_at - Duration::minutes(10)).into(),
+                    item.program.start_at.into(),
+                    Local::now(),
+                ) && item.is_active
+                {
+                    let save_location = match item.plan_id {
+                        PlanId::Word(_) => "",
+                        PlanId::Series(_) => "",
+                        PlanId::None => "",
+                    };
+
+                    let task = RecordingTaskDescription {
+                        program: item.program.clone(),
+                        save_location: save_location.into(),
+                    };
+
+                    tx.send(RecordControlMessage::CreateOrUpdate(task))
+                        .await
+                        .unwrap();
+                }
+                else if is_in_the_recording_range(
                     item.program.start_at.into(),
                     (item.program.start_at + Duration::milliseconds(item.program.duration as i64))
                         .into(),
@@ -95,6 +116,7 @@ pub(crate) async fn scheduler_startup(
                         program: item.program.clone(),
                         save_location: save_location.into(),
                     };
+
                     tx.send(RecordControlMessage::CreateOrUpdate(task))
                         .await
                         .unwrap();
@@ -126,5 +148,6 @@ fn is_in_the_recording_range(
     right: DateTime<Local>,
     value: DateTime<Local>,
 ) -> bool {
-    (left - Duration::minutes(10) < value) && (value < right)
+    assert!( left < right );
+    (left < value) && (value < right)
 }

@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate machine;
+
 use std::sync::Arc;
 
 use structopt::StructOpt;
