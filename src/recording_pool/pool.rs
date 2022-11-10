@@ -25,9 +25,51 @@ impl RecTaskQueue {
     pub(crate) fn new() -> Self {
         Self::default()
     }
-    pub(crate) fn add(&self, info: RecordingTaskDescription) {}
-    pub(crate) fn try_add(&self, info: RecordingTaskDescription) {}
-    pub(crate) fn try_remove(&self, id: i64) {}
+    pub(crate) fn add(&mut self, info: RecordingTaskDescription) {
+        // 1. Insert RecordingTaskDescription regardless of its existence.
+        // 2. Create new task only if there's no abort_handle that has the same id in inner_abort_handle.
+        //    In this situation, RecordingTaskDescription should be overwritten.
+        let id = info.program.id;
+
+        self.inner.insert(id, info);
+
+        if !self.inner_abort_handle.contains_key(&id) {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            tokio::spawn(generate_task(id, rx));
+
+            self.inner_abort_handle.insert(id, tx);
+        }
+    }
+    pub(crate) fn try_add(&mut self, info: RecordingTaskDescription) {
+        // 1. Create new task only if there's no abort_handle that has the same id in inner_abort_handle.
+        //    In this situation, RecordingTaskDescription should be overwritten.
+        // 2. Otherwise, create RecordingTaskDescription if it isn't exist.
+        let id = info.program.id;
+
+        let insertion_result = {
+            if !self.inner.contains_key(&id) {
+                self.inner.insert(id, info);
+
+                if !self.inner_abort_handle.contains_key(&id) {
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+                    tokio::spawn(generate_task(id, rx));
+
+                    self.inner_abort_handle.insert(id, tx);
+                }
+                true
+            } else {
+                false
+            }
+        };
+    }
+    pub(crate) fn try_remove(&mut self, id: i64) -> bool {
+        let info_removal = self.inner.remove(&id);
+        let handle_removal = self
+            .inner_abort_handle
+            .remove(&id)
+            .and_then(|abort| abort.send(()).ok());
+        info_removal.is_some() || handle_removal.is_some()
+    }
     pub(crate) fn at(&self, id: &i64) -> Option<&RecordingTaskDescription> {
         self.inner.get(&id)
     }

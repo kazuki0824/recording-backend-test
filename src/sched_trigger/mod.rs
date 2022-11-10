@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Local};
-use log::{info, warn};
+use log::{error, info, warn};
 use mirakurun_client::models::Program;
 use serde_derive::{Deserialize, Serialize};
 use tokio::sync::mpsc::Sender;
@@ -78,55 +78,67 @@ pub(crate) async fn scheduler_startup(
             info!("{} scheduling units found.", found);
 
             for item in q_schedules.items.iter() {
-                if is_in_the_recording_range(
-                    (item.program.start_at - Duration::minutes(10)).into(),
-                    item.program.start_at.into(),
-                    Local::now(),
-                ) && item.is_active
-                {
-                    let save_location = match item.plan_id {
-                        PlanId::Word(_) => "",
-                        PlanId::Series(_) => "",
-                        PlanId::None => "",
-                    };
+                match item {
+                    // 有効かつ長さ有限
+                    Schedule {is_active: true, program: Program{ duration: Some(length_msec),  .. }, ..} => {
+                        //保存場所の決定
+                        let save_location = match item.plan_id {
+                            PlanId::Word(id) => format!("./word_{}", id),
+                            PlanId::Series(id) => format!("./series_{}", id),
+                            PlanId::None => "./common".to_string(),
+                        };
 
-                    let task = RecordingTaskDescription {
-                        program: item.program.clone(),
-                        save_location: save_location.into(),
-                    };
+                        let task = RecordingTaskDescription {
+                            program: item.program.clone(),
+                            save_location,
+                        };
 
-                    tx.send(RecordControlMessage::CreateOrUpdate(task))
-                        .await
-                        .unwrap();
-                } else if is_in_the_recording_range(
-                    item.program.start_at.into(),
-                    (item.program.start_at + Duration::milliseconds(item.program.duration as i64))
-                        .into(),
-                    Local::now(),
-                ) && item.is_active
-                {
-                    let save_location = match item.plan_id {
-                        PlanId::Word(_) => "",
-                        PlanId::Series(_) => "",
-                        PlanId::None => "",
-                    };
-
-                    let task = RecordingTaskDescription {
-                        program: item.program.clone(),
-                        save_location: save_location.into(),
-                    };
-
-                    tx.send(RecordControlMessage::CreateOrUpdate(task))
-                        .await
-                        .unwrap();
+                        if is_in_the_recording_range(
+                            // 放送開始10分以内前
+                            (item.program.start_at - Duration::minutes(10)).into(),
+                            item.program.start_at.into(),
+                            Local::now(),
+                        ) {
+                            // Mirakurun側の更新を取り入れる
+                            tx.send(RecordControlMessage::CreateOrUpdate(task))
+                                .await
+                                .unwrap();
+                        } else if is_in_the_recording_range(
+                            // 放送中
+                            item.program.start_at.into(),
+                            (item.program.start_at + Duration::milliseconds(*length_msec as i64))
+                                .into(),
+                            Local::now(),
+                        ) {
+                            // Mirakurun側の更新を取り入れず、タスク側の状態遷移に一任する
+                            // 存在しない場合は追加する
+                            // 放送されているのにDLが始まっていない（ex. 起動時にすでに放送がはじまっていた場合）
+                            tx.send(RecordControlMessage::TryCreate(task))
+                                .await
+                                .unwrap();
+                        }
+                    }
+                    Schedule{is_active: true, program: Program { duration: None, .. }, ..} => {
+                        error!("録画開始時点でduration不明")
+                    }
+                    _ => continue,
                 }
             }
 
             // Drop expired item
             q_schedules.items.retain(|item| {
-                let end_of_program =
-                    item.program.start_at + Duration::milliseconds(item.program.duration as i64);
-                end_of_program > Local::now()
+                let start_at = item.program.start_at;
+
+                match item {
+                    Schedule { program: Program{ duration: Some(length_msec), .. }, .. }  => {
+                        //長さ有限かつ現在放送終了してたらドロップ
+                        Local::now() < start_at + Duration::milliseconds(*length_msec as i64)
+                    }
+                    Schedule { program: Program{ duration: None, .. }, .. }  => {
+                        //長さ未定のときは、開始時刻から１時間経過したらドロップ
+                        Local::now() < start_at + Duration::hours(1)
+                    }
+                }
             });
             remainder = q_schedules.items.len();
 

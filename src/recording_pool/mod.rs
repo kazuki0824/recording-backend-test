@@ -39,7 +39,11 @@ pub(crate) async fn recording_pool_startup(mut rx: Receiver<RecordControlMessage
 
         match received {
             Some(RecordControlMessage::CreateOrUpdate(info)) => REC_POOL.write().unwrap().add(info),
-            Some(RecordControlMessage::Remove(id)) => REC_POOL.write().unwrap().try_remove(id),
+            Some(RecordControlMessage::Remove(id)) => {
+                if REC_POOL.write().unwrap().try_remove(id) {
+                    info!("id: {} is removed from recording pool.", id)
+                }
+            }
             Some(RecordControlMessage::TryCreate(info)) => REC_POOL.write().unwrap().try_add(info),
             None => continue,
         };
