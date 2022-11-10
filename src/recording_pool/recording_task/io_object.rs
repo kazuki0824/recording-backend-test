@@ -81,30 +81,33 @@ impl AsyncWrite for IoObject {
     ) -> Poll<Result<usize, Error>> {
         match self.get_mut() {
             Self::WithFilter(Child {
-                stdin: Some(ref mut stdin), ..
+                stdin: Some(ref mut stdin),
+                ..
             }) => Pin::new(stdin).poll_write(cx, buf),
             Self::Raw(ref mut raw_out) => Pin::new(raw_out).poll_write(cx, buf),
-            _ => { panic!("This process has no stdin.") }
+            _ => panic!("This process has no stdin."),
         }
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         match self.get_mut() {
             Self::WithFilter(Child {
-                stdin: Some(ref mut stdin), ..
+                stdin: Some(ref mut stdin),
+                ..
             }) => Pin::new(stdin).poll_flush(cx),
             Self::Raw(ref mut raw_out) => Pin::new(raw_out).poll_flush(cx),
-            _ => { panic!("This process has no stdin.") }
+            _ => panic!("This process has no stdin."),
         }
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         match self.get_mut() {
             Self::WithFilter(Child {
-                stdin: Some(ref mut stdin), ..
+                stdin: Some(ref mut stdin),
+                ..
             }) => Pin::new(stdin).poll_shutdown(cx),
             Self::Raw(ref mut raw_out) => Pin::new(raw_out).poll_shutdown(cx),
-            _ => { panic!("This process has no stdin.") }
+            _ => panic!("This process has no stdin."),
         }
     }
 }

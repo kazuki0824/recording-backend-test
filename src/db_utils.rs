@@ -13,6 +13,7 @@ pub fn get_temporary_accessor() -> Client {
     let args = Opt::from_args();
     Client::new(args.meilisearch_base_uri, "masterKey")
 }
+
 pub async fn push_programs_ranges(index: &Index, data: &[Program]) -> Result<Task, Error> {
     index
         .add_or_update(data, Some("id"))
@@ -20,6 +21,7 @@ pub async fn push_programs_ranges(index: &Index, data: &[Program]) -> Result<Tas
         .wait_for_completion(&index.client, None, Some(Duration::from_secs(10)))
         .await
 }
+
 pub async fn push_services_ranges(index: &Index, data: &[Service]) -> Result<Task, Error> {
     index
         .add_or_update(data, Some("id"))
@@ -27,6 +29,7 @@ pub async fn push_services_ranges(index: &Index, data: &[Service]) -> Result<Tas
         .wait_for_completion(&index.client, None, Some(Duration::from_secs(10)))
         .await
 }
+
 pub async fn pull_program(client: &Client, id: i64) -> Result<Program, Error> {
     client
         .get_index("_programs")
@@ -34,6 +37,7 @@ pub async fn pull_program(client: &Client, id: i64) -> Result<Program, Error> {
         .get_document(&*id.to_string())
         .await
 }
+
 pub async fn pull_service(client: &Client, id: i64) -> Result<Service, Error> {
     client
         .get_index("_services")
@@ -41,6 +45,7 @@ pub async fn pull_service(client: &Client, id: i64) -> Result<Service, Error> {
         .get_document(&*id.to_string())
         .await
 }
+
 pub async fn get_all_programs(client: &Client) -> Result<Vec<Program>, Error> {
     client
         .get_index("_programs")
@@ -49,6 +54,7 @@ pub async fn get_all_programs(client: &Client) -> Result<Vec<Program>, Error> {
         .await
         .and_then(|f| Ok(f.results))
 }
+
 pub async fn get_all_services(client: &Client) -> Result<Vec<Service>, Error> {
     client
         .get_index("_services")

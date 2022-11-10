@@ -2,8 +2,8 @@ use std::sync::RwLock;
 
 use log::info;
 use mirakurun_client::models::Program;
-use serde_derive::{Deserialize, Serialize};
 use once_cell::sync::Lazy;
+use serde_derive::{Deserialize, Serialize};
 use tokio::sync::mpsc::Receiver;
 
 use crate::recording_pool::pool::RecTaskQueue;
@@ -11,7 +11,8 @@ use crate::recording_pool::pool::RecTaskQueue;
 pub(crate) mod pool;
 mod recording_task;
 
-pub(crate) static REC_POOL: Lazy<RwLock<RecTaskQueue>> = Lazy::new(|| RwLock::new(RecTaskQueue::new()));
+pub(crate) static REC_POOL: Lazy<RwLock<RecTaskQueue>> =
+    Lazy::new(|| RwLock::new(RecTaskQueue::new()));
 
 #[derive(Debug)]
 pub enum RecordControlMessage {

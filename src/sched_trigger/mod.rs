@@ -34,7 +34,8 @@ impl Drop for SchedQueue {
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Schedule {
     pub(crate) program: Program,
-    pub(crate) plan_id: PlanId, // If it is added through a plan (e.g. Record all of the items in the series), its uuid is stored here.
+    pub(crate) plan_id: PlanId,
+    // If it is added through a plan (e.g. Record all of the items in the series), its uuid is stored here.
     pub(crate) is_active: bool,
 }
 
@@ -46,7 +47,7 @@ pub(crate) async fn scheduler_startup(
     {
         q_schedules.lock().await.items.append(&mut {
             let path = Path::new("./q_schedules.json");
-            let schedules=
+            let schedules =
                 if path.exists() {
                     let str = std::fs::read(path.canonicalize()?)?;
                     match serde_json::from_slice::<Vec<Schedule>>(&str)
@@ -57,8 +58,7 @@ pub(crate) async fn scheduler_startup(
                             None
                         }
                     }
-                }
-                else {
+                } else {
                     None
                 };
             schedules.unwrap_or_else(|| {
@@ -98,8 +98,7 @@ pub(crate) async fn scheduler_startup(
                     tx.send(RecordControlMessage::CreateOrUpdate(task))
                         .await
                         .unwrap();
-                }
-                else if is_in_the_recording_range(
+                } else if is_in_the_recording_range(
                     item.program.start_at.into(),
                     (item.program.start_at + Duration::milliseconds(item.program.duration as i64))
                         .into(),
@@ -148,6 +147,6 @@ fn is_in_the_recording_range(
     right: DateTime<Local>,
     value: DateTime<Local>,
 ) -> bool {
-    assert!( left < right );
+    assert!(left < right);
     (left < value) && (value < right)
 }

@@ -25,9 +25,11 @@ machine!(
 impl IntoB2 for A {}
 impl IntoB2 for B1 {}
 impl IntoB2 for B2 {}
+
 impl IntoRec for A {}
 impl IntoRec for B1 {}
 impl IntoRec for B2 {}
+
 impl A {
     fn on_wait_for_premiere(self, WaitForPremiere { start_at }: WaitForPremiere) -> RecordingState {
         if start_at < Local::now() {
@@ -41,6 +43,7 @@ impl A {
         }
     }
 }
+
 impl B1 {
     fn on_wait_for_premiere(self, WaitForPremiere { start_at }: WaitForPremiere) -> RecordingState {
         if self.since + Duration::hours(3) < Local::now() {
@@ -50,6 +53,7 @@ impl B1 {
         }
     }
 }
+
 impl B2 {
     fn on_present_program_lost(self, _: PresentProgramLost) -> Lost {
         Lost { graceful: true }
@@ -79,6 +83,7 @@ trait IntoB2 {
         }
     }
 }
+
 trait IntoRec {
     fn on_found_in_present(self, _: FoundInPresent) -> Rec
     where
