@@ -6,7 +6,6 @@ use std::sync::Arc;
 use structopt::StructOpt;
 use tokio::sync::Mutex;
 
-use crate::recording_pool::pool::RecTaskQueue;
 use crate::sched_trigger::SchedQueue;
 use crate::{
     api::api_startup, epg_syncer::epg_sync_startup, recording_pool::recording_pool_startup,
@@ -42,7 +41,6 @@ async fn main() {
     let (rqn_tx, rqn_rx) = tokio::sync::mpsc::channel(100);
 
     //Deserialize
-    let q_recording = Arc::new(Mutex::new(RecTaskQueue::new().unwrap()));
     let q_schedules = Arc::new(Mutex::new(SchedQueue { items: vec![] }));
     //let rules;
 
@@ -50,9 +48,9 @@ async fn main() {
     tokio::select! {
         _ = epg_sync_startup(q_schedules.clone()) => {  },
         _ = scheduler_startup(q_schedules.clone(), rqn_tx.clone()) => {  },
-        _ = recording_pool_startup(q_recording.clone(), rqn_rx) => {  },
+        _ = recording_pool_startup(rqn_rx) => {  },
 
-        _ = api_startup(q_schedules.clone(), q_recording.clone()) => {  },
+        _ = api_startup(q_schedules.clone()) => {  },
 
         _ = tokio::signal::ctrl_c() => { println!("First signal: gracefully exitting...") }
     }

@@ -1,11 +1,9 @@
 /// Ser/des for recording_pool. Contents are serialized on drop automatically.
 use std::collections::HashMap;
-use std::io::{Error, Read};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::io::Error;
 
 use futures_util::TryStreamExt;
-use log::{debug, info, warn};
+use log::warn;
 use mirakurun_client::apis::configuration::Configuration;
 use mirakurun_client::apis::programs_api::get_program_stream;
 use structopt::StructOpt;
@@ -14,7 +12,7 @@ use tokio::sync::oneshot::{Receiver, Sender};
 use tokio_util::io::StreamReader;
 
 use crate::recording_pool::recording_task::RecordingTask;
-use crate::recording_pool::{REC_POOL, RecordingTaskDescription};
+use crate::recording_pool::{RecordingTaskDescription, REC_POOL};
 use crate::Opt;
 
 #[derive(Default)]
@@ -27,6 +25,9 @@ impl RecTaskQueue {
     pub(crate) fn new() -> Self {
         Self::default()
     }
+    pub(crate) fn add(&self, info: RecordingTaskDescription) {}
+    pub(crate) fn try_add(&self, info: RecordingTaskDescription) {}
+    pub(crate) fn try_remove(&self, id: i64) {}
     pub(crate) fn at(&self, id: &i64) -> Option<&RecordingTaskDescription> {
         self.inner.get(&id)
     }
@@ -40,7 +41,15 @@ impl RecTaskQueue {
 
 async fn generate_task(id: i64, rx: Receiver<()>) -> Result<(), Error> {
     let (mut src, mut rec) = {
-        let target = REC_POOL.lock().await.inner.get(&id).expect("A new task cannot be spawned because the RecordingTaskDescription is not found.").clone();
+        let target = REC_POOL
+            .read()
+            .unwrap()
+            .inner
+            .get(&id)
+            .expect(
+                "A new task cannot be spawned because the RecordingTaskDescription is not found.",
+            )
+            .clone();
 
         // Create a new task
         let rec = RecordingTask::new(&target).await?;

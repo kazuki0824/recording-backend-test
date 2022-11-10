@@ -1,10 +1,14 @@
 use std::io::Error;
 use std::path::PathBuf;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
+use chrono::{DateTime, Duration, Local};
 use pin_project_lite::pin_project;
+use tokio::io::AsyncWrite;
 
-use crate::recording_pool::recording_task::{eit_parser::EitParser, io_object::OutputObject};
-use crate::recording_pool::RecordingTaskDescription;
+use crate::recording_pool::recording_task::{eit_parser::EitParser, io_object::IoObject};
+use crate::recording_pool::{RecordingTaskDescription, REC_POOL};
 
 mod eit_parser;
 mod io_object;
@@ -31,9 +35,7 @@ impl A {
                 since: Local::now(),
             })
         } else if self.since + Duration::hours(1) < Local::now() {
-            RecordingState::Lost(Lost {
-                graceful: false,
-            })
+            RecordingState::Lost(Lost { graceful: false })
         } else {
             RecordingState::A(A { since: self.since })
         }
@@ -42,9 +44,7 @@ impl A {
 impl B1 {
     fn on_wait_for_premiere(self, WaitForPremiere { start_at }: WaitForPremiere) -> RecordingState {
         if self.since + Duration::hours(3) < Local::now() {
-            RecordingState::Lost(Lost {
-                graceful: false,
-            })
+            RecordingState::Lost(Lost { graceful: false })
         } else {
             RecordingState::B1(B1 { since: self.since })
         }
@@ -52,7 +52,7 @@ impl B1 {
 }
 impl B2 {
     fn on_present_program_lost(self, _: PresentProgramLost) -> Lost {
-        Lost {graceful: true}
+        Lost { graceful: true }
     }
 }
 
@@ -104,15 +104,18 @@ pub struct WaitForPremiere {
     start_at: DateTime<Local>,
 }
 
-pub(crate) struct RecordingTask {
-    target: IoObject,
-    eit: EitParser,
-    pub(crate) state: RecordingState,
-    pub(crate) id: i64
+pin_project! {
+    pub(crate) struct RecordingTask {
+        #[pin]
+        target: IoObject,
+        eit: EitParser,
+        pub(crate) state: RecordingState,
+        pub(crate) id: i64
+    }
 }
 
 impl RecordingTask {
-    pub(crate) async fn new(info: RecordingTaskDescription) -> Result<Self, Error> {
+    pub(crate) async fn new(info: &RecordingTaskDescription) -> Result<Self, Error> {
         let mut target = PathBuf::from(&info.save_location);
         target.push(format!(
             "{}_{}.m2ts",
@@ -122,7 +125,7 @@ impl RecordingTask {
                 .as_ref()
                 .unwrap_or(&"untitled".to_string())
         ));
-        let target = OutputObject::new(target.as_path()).await?;
+        let target = IoObject::new(target.as_path()).await?;
         Ok(Self {
             target,
             eit: EitParser::new(),
@@ -131,5 +134,37 @@ impl RecordingTask {
             }),
             id: info.program.id,
         })
+    }
+}
+
+impl AsyncWrite for RecordingTask {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        let me = self.project();
+
+        // Get RecordingDescription. If not exist, return error.
+        if let Some(item) = REC_POOL.read().unwrap().at(me.id) {
+            //TODO: Evaluate states and control IoObject
+            match me.eit.push(buf) {
+                None => (),
+                Some(eit) => unimplemented!(),
+            } //TODO: Eit Parser's result
+            me.target.poll_write(cx, buf)
+        } else {
+            me.target.poll_shutdown(cx).map_ok(|_| 0)
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let me = self.project();
+        me.target.poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
+        let me = self.project();
+        me.target.poll_shutdown(cx)
     }
 }

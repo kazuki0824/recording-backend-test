@@ -14,14 +14,11 @@ use tokio::sync::Mutex;
 
 use crate::db_utils::{get_all_programs, get_temporary_accessor, pull_program};
 use crate::recording_planner::PlanId;
-use crate::recording_pool::RecordingTaskDescription;
+use crate::recording_pool::{RecordingTaskDescription, REC_POOL};
 use crate::sched_trigger::Schedule;
-use crate::{Opt, RecTaskQueue, SchedQueue};
+use crate::{Opt, SchedQueue};
 
-pub(crate) async fn api_startup(
-    q_schedules: Arc<Mutex<SchedQueue>>,
-    q_recording: Arc<Mutex<RecTaskQueue>>,
-) {
+pub(crate) async fn api_startup(q_schedules: Arc<Mutex<SchedQueue>>) {
     let q_schedules1 = q_schedules.clone();
     let q_schedules2 = q_schedules.clone();
     let q_schedules3 = q_schedules.clone();
@@ -55,9 +52,9 @@ pub(crate) async fn api_startup(
             .route(
                 "/q/recording",
                 get(move || async move {
-                    let obj = q_recording
-                        .lock()
-                        .await
+                    let obj = REC_POOL
+                        .read()
+                        .unwrap()
                         .iter()
                         .cloned()
                         .collect::<Vec<RecordingTaskDescription>>();
