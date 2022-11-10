@@ -79,7 +79,7 @@ impl AsyncWrite for IoObject {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, Error>> {
-        match *self {
+        match self.get_mut() {
             Self::WithFilter(Child {
                 stdin: Some(ref mut stdin), ..
             }) => Pin::new(stdin).poll_write(cx, buf),
@@ -89,7 +89,7 @@ impl AsyncWrite for IoObject {
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
-        match *self {
+        match self.get_mut() {
             Self::WithFilter(Child {
                 stdin: Some(ref mut stdin), ..
             }) => Pin::new(stdin).poll_flush(cx),
@@ -99,7 +99,7 @@ impl AsyncWrite for IoObject {
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
-        match *self {
+        match self.get_mut() {
             Self::WithFilter(Child {
                 stdin: Some(ref mut stdin), ..
             }) => Pin::new(stdin).poll_shutdown(cx),
