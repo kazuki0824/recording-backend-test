@@ -75,17 +75,46 @@ pub(crate) async fn scheduler_startup(
 
             let (found, mut remainder) = (q_schedules.items.len(), 0usize);
 
-            info!("{} scheduling units found.", found);
+            // Drop expired item
+            q_schedules.items.retain(|item| {
+                let start_at = item.program.start_at;
+
+                match item {
+                    Schedule { program: Program{ duration: Some(length_msec), .. }, .. }  => {
+                        //長さ有限かつ現在放送終了してたらドロップ
+                        Local::now() < start_at + Duration::milliseconds(*length_msec as i64)
+                    }
+                    Schedule { program: Program{ duration: None, .. }, .. }  => {
+                        //長さ未定のときは、開始時刻から１時間経過したらドロップ
+                        Local::now() < start_at + Duration::hours(1)
+                    }
+                }
+            });
+            remainder = q_schedules.items.len();
+
+            info!(
+                "{} schedule units remains. {} of unit(s) dropped.",
+                remainder,
+                found - remainder
+            );
+
 
             for item in q_schedules.items.iter() {
                 match item {
                     // 有効かつ長さ有限
                     Schedule {is_active: true, program: Program{ duration: Some(length_msec),  .. }, ..} => {
                         //保存場所の決定
-                        let save_location = match item.plan_id {
-                            PlanId::Word(id) => format!("./word_{}", id),
-                            PlanId::Series(id) => format!("./series_{}", id),
-                            PlanId::None => "./common".to_string(),
+                        let save_location = {
+                            let candidate = match item.plan_id {
+                                PlanId::Word(id) => format!("./word_{}/", id),
+                                PlanId::Series(id) => format!("./series_{}/", id),
+                                PlanId::None => "./common/".to_string(),
+                            };
+                            if let Err(e) = std::fs::create_dir_all(&candidate) {
+                                error!("Failed to create dir at {}.\n{}", &candidate, e);
+                                continue
+                            }
+                            std::fs::canonicalize(candidate).unwrap()
                         };
 
                         let task = RecordingTaskDescription {
@@ -119,34 +148,11 @@ pub(crate) async fn scheduler_startup(
                         }
                     }
                     Schedule{is_active: true, program: Program { duration: None, .. }, ..} => {
-                        error!("録画開始時点でduration不明")
+                        error!("未実装：録画開始時点でduration不明")
                     }
                     _ => continue,
                 }
             }
-
-            // Drop expired item
-            q_schedules.items.retain(|item| {
-                let start_at = item.program.start_at;
-
-                match item {
-                    Schedule { program: Program{ duration: Some(length_msec), .. }, .. }  => {
-                        //長さ有限かつ現在放送終了してたらドロップ
-                        Local::now() < start_at + Duration::milliseconds(*length_msec as i64)
-                    }
-                    Schedule { program: Program{ duration: None, .. }, .. }  => {
-                        //長さ未定のときは、開始時刻から１時間経過したらドロップ
-                        Local::now() < start_at + Duration::hours(1)
-                    }
-                }
-            });
-            remainder = q_schedules.items.len();
-
-            info!(
-                "{} schedule units remains. {} of unit(s) dropped.",
-                remainder,
-                found - remainder
-            );
         }
         info!("Scanning schedules completed. Now releasing q_schedules.");
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
