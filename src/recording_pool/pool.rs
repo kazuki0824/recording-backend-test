@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::io::Error;
 
 use futures_util::TryStreamExt;
-use log::warn;
+use log::error;
 use mirakurun_client::apis::configuration::Configuration;
 use mirakurun_client::apis::programs_api::get_program_stream;
 use structopt::StructOpt;
@@ -35,7 +35,7 @@ impl RecTaskQueue {
 
         if !self.inner_abort_handle.contains_key(&id) {
             let (tx, rx) = tokio::sync::oneshot::channel();
-            tokio::spawn(generate_task(id, rx));
+            tokio::spawn(spawn_new(id, rx));
 
             self.inner_abort_handle.insert(id, tx);
         }
@@ -52,7 +52,7 @@ impl RecTaskQueue {
 
                 if !self.inner_abort_handle.contains_key(&id) {
                     let (tx, rx) = tokio::sync::oneshot::channel();
-                    tokio::spawn(generate_task(id, rx));
+                    tokio::spawn(spawn_new(id, rx));
 
                     self.inner_abort_handle.insert(id, tx);
                 }
@@ -62,7 +62,7 @@ impl RecTaskQueue {
             }
         };
     }
-    pub(crate) fn try_remove(&mut self, id: i64) -> bool {
+    pub(crate) fn try_remove(&mut self, id: &i64) -> bool {
         let info_removal = self.inner.remove(&id);
         let handle_removal = self
             .inner_abort_handle
@@ -81,7 +81,16 @@ impl RecTaskQueue {
     }
 }
 
-async fn generate_task(id: i64, rx: Receiver<()>) -> Result<(), Error> {
+async fn spawn_new(id: i64, rx: Receiver<()>) {
+    select! {
+        // If value is removed, abort the transmission.
+        //_ = || async{ while let Some(_) = REC_POOL.lock().await.inner.get(&id) {} }=> {},
+        _ = rx => {},
+        Err(e) = generate_task(id) => error!("{:#?}", e)
+    }
+}
+
+async fn generate_task(id: i64) -> std::io::Result<u64> {
     let (mut src, mut rec) = {
         let target = REC_POOL
             .read()
@@ -89,12 +98,12 @@ async fn generate_task(id: i64, rx: Receiver<()>) -> Result<(), Error> {
             .inner
             .get(&id)
             .expect(
-                "A new task cannot be spawned because the RecordingTaskDescription is not found.",
+                "A new task cannot be spawned because the RecordingTaskDescription is not found. This is unreachable.",
             )
             .clone();
 
         // Create a new task
-        let rec = RecordingTask::new(&target).await?;
+        let rec = RecordingTask::new(& target).await?;
 
         let args = Opt::from_args();
         let m_url = args.mirakurun_base_uri;
@@ -112,13 +121,6 @@ async fn generate_task(id: i64, rx: Receiver<()>) -> Result<(), Error> {
         (src, rec)
     };
 
-    select! {
-        // If value is removed, abort the transmission.
-        //_ = || async{ while let Some(_) = REC_POOL.lock().await.inner.get(&id) {} }=> {},
-        _ = rx => {},
-        // Stream connection
-        Err(e) = tokio::io::copy(&mut src, &mut rec) => warn!("{}", e)
-    }
-
-    Ok(())
+    // Stream connection
+    tokio::io::copy(&mut src, &mut rec).await
 }

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::RwLock;
 
 use log::info;
@@ -25,7 +26,7 @@ pub enum RecordControlMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordingTaskDescription {
     pub program: Program,
-    pub save_location: String,
+    pub save_location: PathBuf,
 }
 
 pub(crate) async fn recording_pool_startup(mut rx: Receiver<RecordControlMessage>) {
@@ -40,7 +41,7 @@ pub(crate) async fn recording_pool_startup(mut rx: Receiver<RecordControlMessage
         match received {
             Some(RecordControlMessage::CreateOrUpdate(info)) => REC_POOL.write().unwrap().add(info),
             Some(RecordControlMessage::Remove(id)) => {
-                if REC_POOL.write().unwrap().try_remove(id) {
+                if REC_POOL.write().unwrap().try_remove(&id) {
                     info!("id: {} is removed from recording pool.", id)
                 }
             }

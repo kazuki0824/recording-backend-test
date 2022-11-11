@@ -4,6 +4,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use chrono::{DateTime, Duration, Local};
+use log::info;
 use pin_project_lite::pin_project;
 use tokio::io::AsyncWrite;
 
@@ -121,7 +122,8 @@ pin_project! {
 
 impl RecordingTask {
     pub(crate) async fn new(info: &RecordingTaskDescription) -> Result<Self, Error> {
-        let mut target = PathBuf::from(&info.save_location);
+        let info = info.clone();
+        let mut target = info.save_location;
         target.push(format!(
             "{}_{}.m2ts",
             info.program.id,
@@ -170,6 +172,8 @@ impl AsyncWrite for RecordingTask {
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         let me = self.project();
+        REC_POOL.write().unwrap().try_remove(me.id);
+        info!("id: {} is shutting down...", me.id);
         me.target.poll_shutdown(cx)
     }
 }

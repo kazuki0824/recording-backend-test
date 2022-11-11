@@ -126,7 +126,7 @@ impl EpgSyncManager {
                             continue;
                         }
                         Ok(Program(value)) => {
-                            info!("EIT[p/f] from Mirakurun. {:#?}", &value);
+                            info!("EIT[p/f] from Mirakurun. \n{:?}", &value);
                             match push_programs_ranges(
                                 &tracker.index_programs,
                                 &vec![value.clone()],
