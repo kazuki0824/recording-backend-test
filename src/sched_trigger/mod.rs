@@ -119,7 +119,7 @@ pub(crate) async fn scheduler_startup(
 
                         let task = RecordingTaskDescription {
                             program: item.program.clone(),
-                            save_location,
+                            save_dir_location: save_location,
                         };
 
                         if is_in_the_recording_range(

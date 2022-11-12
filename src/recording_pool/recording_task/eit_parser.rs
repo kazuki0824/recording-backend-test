@@ -7,9 +7,10 @@ pub(super) struct EitParser {
     buf: [u8; 8192],
 }
 
-pub(super) struct Eit {
-    pub(super) start: DateTime<Local>,
-    pub(super) end: DateTime<Local>,
+pub(super) enum EitDetected {
+    FoundInP,
+    FoundInF,
+    NotFound
 }
 
 impl EitParser {
@@ -19,7 +20,7 @@ impl EitParser {
             buf: [0; 8192],
         }
     }
-    pub(super) fn push(&self, buf: &[u8]) -> Option<Eit> {
-        None
+    pub(super) fn push(&self, buf: &[u8]) -> EitDetected {
+        todo!()
     }
 }

@@ -3,7 +3,7 @@ use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use log::warn;
+use log::{info, warn};
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncWrite, BufWriter};
 use tokio::process::{Child, Command};
@@ -15,6 +15,8 @@ pub(super) enum IoObject {
 
 impl IoObject {
     pub(super) async fn new(output: &Path) -> Result<Self, Error> {
+        info!("Saving stream at: {:?}", output);
+
         let child = Command::new(
             "/home/maleicacid/CLionProjects/recorder-backend-rs/target/debug/tsreadex",
         )

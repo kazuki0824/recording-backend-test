@@ -26,7 +26,7 @@ pub enum RecordControlMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordingTaskDescription {
     pub program: Program,
-    pub save_location: PathBuf,
+    pub save_dir_location: PathBuf,
 }
 
 pub(crate) async fn recording_pool_startup(mut rx: Receiver<RecordControlMessage>) {

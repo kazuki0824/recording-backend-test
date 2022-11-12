@@ -1,20 +1,22 @@
 use std::io::Error;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use chrono::{DateTime, Duration, Local};
 use log::info;
 use pin_project_lite::pin_project;
-use tokio::io::AsyncWrite;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::recording_pool::recording_task::{eit_parser::EitParser, io_object::IoObject};
 use crate::recording_pool::{RecordingTaskDescription, REC_POOL};
+use crate::recording_pool::recording_task::eit_parser::EitDetected;
 
 mod eit_parser;
 mod io_object;
 
 machine!(
+    #[derive(Clone, Copy, PartialEq)]
     pub(crate) enum RecordingState {
         A { since: DateTime<Local> },
         B1 { since: DateTime<Local> },
@@ -46,7 +48,7 @@ impl A {
 }
 
 impl B1 {
-    fn on_wait_for_premiere(self, WaitForPremiere { start_at }: WaitForPremiere) -> RecordingState {
+    fn on_wait_for_premiere(self, _: WaitForPremiere) -> RecordingState {
         if self.since + Duration::hours(3) < Local::now() {
             RecordingState::Lost(Lost { graceful: false })
         } else {
@@ -113,34 +115,49 @@ pub struct WaitForPremiere {
 pin_project! {
     pub(crate) struct RecordingTask {
         #[pin]
-        target: IoObject,
+        target: Option<IoObject>,
         eit: EitParser,
+        prev_state: RecordingState,
         pub(crate) state: RecordingState,
-        pub(crate) id: i64
+        pub(crate) id: i64,
+        pub(crate) file_location: PathBuf
     }
 }
 
 impl RecordingTask {
     pub(crate) async fn new(info: &RecordingTaskDescription) -> Result<Self, Error> {
         let info = info.clone();
-        let mut target = info.save_location;
-        target.push(format!(
-            "{}_{}.m2ts",
+        let mut file_location = info.save_dir_location;
+        // Specify file name here
+        file_location.push(format!(
+            "{}_{}.m2ts-tmp",
             info.program.id,
             info.program
                 .name
                 .as_ref()
                 .unwrap_or(&"untitled".to_string())
         ));
-        let target = IoObject::new(target.as_path()).await?;
+        let target = Some(IoObject::new(file_location.as_path()).await?);
         Ok(Self {
             target,
             eit: EitParser::new(),
+            prev_state: RecordingState::A(A {
+                since: Local::now(),
+            }),
             state: RecordingState::A(A {
                 since: Local::now(),
             }),
             id: info.program.id,
+            file_location
         })
+    }
+    pub(crate) async fn transition(&mut self) {
+        if self.prev_state != self.state {
+            self.target.take().unwrap().shutdown().await;
+
+            self.file_location.set_extension("m2ts");
+            self.target = IoObject::new(self.file_location.as_path()).await.ok()
+        }
     }
 }
 
@@ -155,25 +172,27 @@ impl AsyncWrite for RecordingTask {
         // Get RecordingDescription. If not exist, return error.
         if let Some(item) = REC_POOL.read().unwrap().at(me.id) {
             //TODO: Evaluate states and control IoObject
-            match me.eit.push(buf) {
-                None => (),
-                Some(eit) => unimplemented!(),
-            } //TODO: Eit Parser's result
-            me.target.poll_write(cx, buf)
+            let after = match me.eit.push(buf) {
+                EitDetected::FoundInP => me.state.on_found_in_present(FoundInPresent {}),
+                EitDetected::FoundInF => me.state.on_found_in_following(FoundInFollowing {}),
+                EitDetected::NotFound => me.state.on_wait_for_premiere(WaitForPremiere { start_at: REC_POOL.read().unwrap().at(me.id).unwrap().program.start_at.into() })
+            }; //TODO: Eit Parser's result
+
+            me.target.as_pin_mut().unwrap().poll_write(cx, buf)
         } else {
-            me.target.poll_shutdown(cx).map_ok(|_| 0)
+            me.target.as_pin_mut().unwrap().poll_shutdown(cx).map_ok(|_| 0)
         }
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         let me = self.project();
-        me.target.poll_flush(cx)
+        me.target.as_pin_mut().unwrap().poll_flush(cx)
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         let me = self.project();
         REC_POOL.write().unwrap().try_remove(me.id);
         info!("id: {} is shutting down...", me.id);
-        me.target.poll_shutdown(cx)
+        me.target.as_pin_mut().unwrap().poll_shutdown(cx)
     }
 }
