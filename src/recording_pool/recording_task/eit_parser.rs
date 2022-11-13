@@ -1,4 +1,5 @@
 use chrono::{DateTime, Local};
+use crate::recording_pool::RecordingTaskDescription;
 
 struct EitParserInner {}
 
@@ -20,7 +21,7 @@ impl EitParser {
             buf: [0; 8192],
         }
     }
-    pub(super) fn push(&self, buf: &[u8]) -> EitDetected {
+    pub(super) fn push(&self, buf: &[u8], program: &RecordingTaskDescription) -> EitDetected {
         todo!()
     }
 }
